@@ -296,6 +296,9 @@ export class CameraDetectionComponent implements OnInit, OnDestroy {
       canvas.width = 640;
       canvas.height = 640;
       ctx.drawImage(video, 0, 0, 640, 640);
+      canvas.width = 640;
+      canvas.height = 640;
+      ctx.drawImage(video, 0, 0, 640, 640);
       const imageData = ctx.getImageData(0, 0, 640, 640);
 
       const inputTensor = this.preprocessImage(imageData);
@@ -514,12 +517,14 @@ export class CameraDetectionComponent implements OnInit, OnDestroy {
       if (!ctx) return;
 
       // إنشاء صورة اختبارية (مربع أحمر)
-      canvas.width = 320;
-      canvas.height = 320;
+      canvas.width = 640;
+      canvas.height = 640;
+
       ctx.fillStyle = 'red';
       ctx.fillRect(100, 100, 50, 50);
 
-      const imageData = ctx.getImageData(0, 0, 320, 320);
+      const imageData = ctx.getImageData(0, 0, 640, 640);
+
       const input = this.preprocessImage(imageData);
 
       // تشغيل النموذج
@@ -557,11 +562,11 @@ export class CameraDetectionComponent implements OnInit, OnDestroy {
           const ctx = canvas.getContext('2d');
           if (!ctx) return;
 
-          canvas.width = 320;
-          canvas.height = 320;
-          ctx.drawImage(img, 0, 0, 320, 320);
+          canvas.width = 640;
+          canvas.height = 640;
+          ctx.drawImage(img, 0, 0, 640, 640);
+          const imageData = ctx.getImageData(0, 0, 640, 640);
 
-          const imageData = ctx.getImageData(0, 0, 320, 320);
           const input = this.preprocessImage(imageData);
 
           const results = await this.session!.run({ images: input });
