@@ -190,6 +190,7 @@ private showModelError() {
 
   // التعرف على الأشياء
   private async detectObjects() {
+    console.log(this.session);
     if (!this.session) return;
 
     try {
@@ -210,6 +211,7 @@ private showModelError() {
 
       // تشغيل النموذج
       const results = await this.session.run({ images: input });
+      console.log('onnx results:', results);
       const detections = this.postprocessResults(results);
 
       // معالجة النتائج
