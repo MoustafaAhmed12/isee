@@ -188,90 +188,171 @@ private showModelError() {
     }, 2000); // كل ثانيتين
   }
 
-  // التعرف على الأشياء
-  private async detectObjects() {
-    console.log(this.session);
-    if (!this.session) return;
-
-    try {
-      const canvas = this.canvasElement.nativeElement;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // تعيين أبعاد الكانفاس
-      canvas.width = 320;
-      canvas.height = 320;
-
-      // رسم الفيديو على الكانفاس
-      ctx.drawImage(this.videoElement.nativeElement, 0, 0, 320, 320);
-
-      // تحويل الصورة إلى تنسيق مناسب للنموذج
-      const imageData = ctx.getImageData(0, 0, 320, 320);
-      const input = this.preprocessImage(imageData);
-
-      // تشغيل النموذج
-      const results = await this.session.run({ images: input });
-      console.log('onnx results:', results);
-      const detections = this.postprocessResults(results);
-
-      // معالجة النتائج
-      this.processDetections(detections);
-
-    } catch (error) {
-      console.error('خطأ في التعرف على الأشياء:', error);
-    }
+// التعرف على الأشياء
+private async detectObjects() {
+  console.log('بدء التعرف على الأشياء...');
+  if (!this.session) {
+    console.error('النموذج غير محمل');
+    return;
   }
 
-  // معالجة الصورة قبل إدخالها للنموذج
-  private preprocessImage(imageData: ImageData): Tensor {
-    const { data, width, height } = imageData;
-    const input = new Float32Array(3 * 320 * 320);
-    
-    for (let i = 0; i < data.length; i += 4) {
-      const pixelIndex = i / 4;
-      const y = Math.floor(pixelIndex / width);
-      const x = pixelIndex % width;
-      
-      if (x < 320 && y < 320) {
-        const targetIndex = y * 320 + x;
-        input[targetIndex] = data[i] / 255.0;     // R
-        input[320 * 320 + targetIndex] = data[i + 1] / 255.0; // G
-        input[2 * 320 * 320 + targetIndex] = data[i + 2] / 255.0; // B
-      }
+  try {
+    const canvas = this.canvasElement.nativeElement;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      console.error('تعذر الحصول على context للكانفاس');
+      return;
     }
-    
-    return new Tensor('float32', input, [1, 3, 320, 320]);
-  }
 
-  // معالجة نتائج النموذج
-  private postprocessResults(results: any): Detection[] {
-    const detections: Detection[] = [];
-    const output = results.output0.data;
-    const outputDims = results.output0.dims;
+    // تعيين أبعاد الكانفاس
+    const video = this.videoElement.nativeElement;
+    canvas.width = 320;
+    canvas.height = 320;
+
+    // رسم الفيديو على الكانفاس مع الحفاظ على التناسب
+    ctx.drawImage(video, 0, 0, 320, 320);
+
+    // تحويل الصورة إلى تنسيق مناسب للنموذج
+    const imageData = ctx.getImageData(0, 0, 320, 320);
+    const input = this.preprocessImage(imageData);
+
+    console.log('جاري تشغيل النموذج...');
     
-    for (let i = 0; i < outputDims[1]; i++) {
-      const confidence = output[i * outputDims[2] + 4];
-      
-      if (confidence > 0.5) { // ثقة أعلى من 50%
-        const classId = output.slice(i * outputDims[2] + 5, (i + 1) * outputDims[2]).indexOf(
-          Math.max(...output.slice(i * outputDims[2] + 5, (i + 1) * outputDims[2]))
-        );
+    // تشغيل النموذج - قد يكون اسم الإدخال مختلفاً
+    const feeds: any = {};
+    
+    // تجربة أسماء إدخال مختلفة شائعة في YOLOv8
+    const possibleInputNames = ['images', 'input', 'data', 'x'];
+    let inputName = 'images';
+    
+    // البحث عن اسم الإدخال الصحيح
+    for (const name of possibleInputNames) {
+      try {
+        const results = await this.session.run({ [name]: input });
+        console.log('✅ تم تشغيل النموذج بنجاح باسم الإدخال:', name);
+        console.log('نتائج النموذج:', results);
         
-        detections.push({
-          class: this.classNames[classId] || `كائن ${classId}`,
-          confidence: confidence,
-          bbox: [
-            output[i * outputDims[2]],     // x
-            output[i * outputDims[2] + 1], // y
-            output[i * outputDims[2] + 2], // width
-            output[i * outputDims[2] + 3]  // height
-          ]
-        });
+        const detections = this.postprocessResults(results);
+        console.log('الكائنات المكتشفة:', detections);
+        
+        this.processDetections(detections);
+        return;
+      } catch (e) {
+        console.log(`❌ اسم الإدخال ${name} غير صحيح`);
       }
     }
     
-    return detections;
+    console.error('❌ لم يتم العثور على اسم الإدخال الصحيح');
+
+  } catch (error) {
+    console.error('خطأ في التعرف على الأشياء:', error);
   }
+}
+
+// معالجة الصورة قبل إدخالها للنموذج (مصححة)
+private preprocessImage(imageData: ImageData): Tensor {
+  const { data, width, height } = imageData;
+  const input = new Float32Array(3 * 320 * 320);
+  
+  // YOLOv8 يتوقع صورة RGB مع تطبيع 0-1
+  for (let i = 0; i < data.length; i += 4) {
+    const pixelIndex = i / 4;
+    const y = Math.floor(pixelIndex / width);
+    const x = pixelIndex % width;
+    
+    if (x < 320 && y < 320) {
+      const targetIndex = y * 320 + x;
+      
+      // قنوات RGB مع تطبيع
+      input[targetIndex] = data[i] / 255.0;          // R
+      input[320 * 320 + targetIndex] = data[i + 1] / 255.0;  // G  
+      input[2 * 320 * 320 + targetIndex] = data[i + 2] / 255.0; // B
+    }
+  }
+  
+  console.log('تمت معالجة الصورة، الأبعاد:', [1, 3, 320, 320]);
+  return new Tensor('float32', input, [1, 3, 320, 320]);
+}
+
+// معالجة نتائج النموذج (مصححة)
+private postprocessResults(results: any): Detection[] {
+  const detections: Detection[] = [];
+  
+  console.log('هيكل النتائج:', Object.keys(results));
+  
+  // البحث عن المخرج الصحيح - YOLOv8 له أسماء مخرجات مختلفة
+  let outputTensor;
+  const possibleOutputNames = ['output0', 'output', 'detections', 'boxes'];
+  
+  for (const name of possibleOutputNames) {
+    if (results[name]) {
+      outputTensor = results[name];
+      console.log(`✅ تم العثور على المخرج باسم: ${name}`);
+      break;
+    }
+  }
+  
+  if (!outputTensor) {
+    // إذا لم نجد باسم معروف، نأخذ أول مخرج
+    const firstKey = Object.keys(results)[0];
+    outputTensor = results[firstKey];
+    console.log(`🔶 استخدام المخرج الأول: ${firstKey}`);
+  }
+  
+  const output = outputTensor.data;
+  const outputDims = outputTensor.dims;
+  
+  console.log('أبعاد المخرج:', outputDims);
+  console.log('بيانات المخرج:', output);
+  
+  // YOLOv8 عادة يعطي شكل [1, 84, 8400] أو [1, 5, 8400]
+  // حيث 84 = 4 (bbox) + 80 (classes) أو 5 = 4 (bbox) + 1 (confidence)
+  
+  if (outputDims.length === 3 && outputDims[0] === 1) {
+    const numClasses = outputDims[1] - 4; // نطرح 4 لإحداثيات bbox
+    const numBoxes = outputDims[2];
+    
+    console.log(`عدد الصنوف: ${numClasses}, عدد المربعات: ${numBoxes}`);
+    
+    for (let i = 0; i < numBoxes; i++) {
+      const startIdx = i * outputDims[1];
+      const confidence = output[startIdx + 4];
+      
+      if (confidence > 0.5) {
+        // العثور على الصنف ذو الثقة الأعلى
+        let maxClassConfidence = 0;
+        let maxClassId = 0;
+        
+        for (let j = 0; j < numClasses; j++) {
+          const classConfidence = output[startIdx + 4 + j];
+          if (classConfidence > maxClassConfidence) {
+            maxClassConfidence = classConfidence;
+            maxClassId = j;
+          }
+        }
+        
+        const finalConfidence = confidence * maxClassConfidence;
+        
+        if (finalConfidence > 0.5) {
+          detections.push({
+            class: this.classNames[maxClassId] || `كائن ${maxClassId}`,
+            confidence: finalConfidence,
+            bbox: [
+              output[startIdx],     // x
+              output[startIdx + 1], // y
+              output[startIdx + 2], // width
+              output[startIdx + 3]  // height
+            ]
+          });
+        }
+      }
+    }
+  }
+  
+  console.log(`تم اكتشاف ${detections.length} كائن`);
+  return detections;
+}
+
 
   // معالجة الاكتشافات
   private processDetections(detections: Detection[]) {
@@ -337,4 +418,85 @@ private showModelError() {
     this.isDarkMode = saved === 'true';
     document.documentElement.classList.toggle('dark', this.isDarkMode);
   }
+
+  // اختبار النموذج بصورة ثابتة
+async testModelWithStaticImage() {
+  if (!this.session) {
+    console.error('النموذج غير محمل');
+    return;
+  }
+
+  try {
+    console.log('🔍 اختبار النموذج بصورة ثابتة...');
+    
+    const canvas = this.canvasElement.nativeElement;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // إنشاء صورة اختبارية (مربع أحمر)
+    canvas.width = 320;
+    canvas.height = 320;
+    ctx.fillStyle = 'red';
+    ctx.fillRect(100, 100, 50, 50);
+    
+    const imageData = ctx.getImageData(0, 0, 320, 320);
+    const input = this.preprocessImage(imageData);
+    
+    // تشغيل النموذج
+    const results = await this.session.run({ images: input });
+    console.log('نتائج اختبار الصورة الثابتة:', results);
+    
+    const detections = this.postprocessResults(results);
+    console.log('الاكتشافات من الصورة الثابتة:', detections);
+    
+    if (detections.length > 0) {
+      this.processDetections(detections);
+    } else {
+      console.log('❌ لم يتم اكتشاف أي كائن في الصورة الاختبارية');
+    }
+    
+  } catch (error) {
+    console.error('خطأ في اختبار النموذج:', error);
+  }
+}
+
+// تحميل صورة خارجية للاختبار
+async testModelWithExternalImage(imageUrl: string) {
+  if (!this.session) {
+    console.error('النموذج غير محمل');
+    return;
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = async () => {
+      try {
+        const canvas = this.canvasElement.nativeElement;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        canvas.width = 320;
+        canvas.height = 320;
+        ctx.drawImage(img, 0, 0, 320, 320);
+
+        const imageData = ctx.getImageData(0, 0, 320, 320);
+        const input = this.preprocessImage(imageData);
+
+        const results = await this.session!.run({ images: input });
+        console.log('نتائج اختبار الصورة الخارجية:', results);
+        
+        const detections = this.postprocessResults(results);
+        console.log('الاكتشافات من الصورة الخارجية:', detections);
+        
+        this.processDetections(detections);
+        resolve(detections);
+      } catch (error) {
+        console.error('خطأ في اختبار الصورة الخارجية:', error);
+        resolve([]);
+      }
+    };
+    img.src = imageUrl;
+  });
+}
 }
