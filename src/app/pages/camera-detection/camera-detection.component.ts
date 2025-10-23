@@ -329,29 +329,30 @@ export class CameraDetectionComponent implements OnInit, OnDestroy {
   }
 
   // معالجة الصورة قبل إدخالها للنموذج (مصححة)
-  private preprocessImage(imageData: ImageData): Tensor {
-    const { data, width, height } = imageData;
-    const input = new Float32Array(3 * 320 * 320);
+private preprocessImage(imageData: ImageData): Tensor {
+  const { data, width, height } = imageData;
+  const input = new Float32Array(3 * 640 * 640);
 
-    // YOLOv8 يتوقع صورة RGB مع تطبيع 0-1
-    for (let i = 0; i < data.length; i += 4) {
-      const pixelIndex = i / 4;
-      const y = Math.floor(pixelIndex / width);
-      const x = pixelIndex % width;
+  for (let i = 0; i < data.length; i += 4) {
+    const pixelIndex = i / 4;
+    const y = Math.floor(pixelIndex / width);
+    const x = pixelIndex % width;
 
-      if (x < 320 && y < 320) {
-        const targetIndex = y * 320 + x;
+    if (x < 640 && y < 640) {
+      const targetIndex = y * 640 + x;
 
-        // قنوات RGB مع تطبيع
-        input[targetIndex] = data[i] / 255.0; // R
-        input[320 * 320 + targetIndex] = data[i + 1] / 255.0; // G
-        input[2 * 320 * 320 + targetIndex] = data[i + 2] / 255.0; // B
-      }
+      // ترتيب القنوات RGB + تطبيع
+      input[targetIndex] = data[i] / 255.0; // R
+      input[640 * 640 + targetIndex] = data[i + 1] / 255.0; // G
+      input[2 * 640 * 640 + targetIndex] = data[i + 2] / 255.0; // B
     }
-
-    console.log('تمت معالجة الصورة، الأبعاد:', [1, 3, 320, 320]);
-    return new Tensor('float32', input, [1, 3, 320, 320]);
   }
+
+  console.log('✅ تمت معالجة الصورة، الأبعاد:', [1, 3, 640, 640]);
+  return new Tensor('float32', input, [1, 3, 640, 640]);
+}
+
+
 
   // معالجة نتائج النموذج (مصححة)
   private postprocessResults(results: any): Detection[] {
