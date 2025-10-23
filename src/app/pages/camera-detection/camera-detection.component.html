@@ -1,0 +1,143 @@
+<!-- camera-detection.component.html -->
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+  <!-- شريط العنوان -->
+  <header class="bg-white dark:bg-gray-800 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8 flex justify-between items-center">
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-white">
+        👁️ مساعد الرؤية للمكفوفين
+      </h1>
+      
+      <!-- زر الوضع الليلي -->
+      <button 
+        (click)="toggleDarkMode()"
+        class="p-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+        aria-label="تبديل الوضع الليلي"
+      >
+        {{ isDarkMode ? '☀️' : '🌙' }}
+      </button>
+    </div>
+  </header>
+
+  <!-- المحتوى الرئيسي -->
+  <main class="max-w-4xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+    <!-- حالة التحميل -->
+    <div *ngIf="isLoading" class="flex justify-center items-center py-12">
+      <div class="text-center">
+        <div class="inline-block animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        <p class="mt-4 text-gray-600 dark:text-gray-400">جاري التحميل...</p>
+      </div>
+    </div>
+
+    <!-- منطقة الفيديو -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden mb-6 transition-all duration-300"
+         [class.opacity-50]="!isCameraOn">
+      <div class="relative aspect-video bg-black flex items-center justify-center">
+        <!-- مؤشر حالة الكاميرا -->
+        <div class="absolute top-4 left-4 z-10 flex items-center space-x-2 rtl:space-x-reverse">
+          <div class="w-3 h-3 rounded-full" 
+               [class.bg-red-500]="!isCameraOn"
+               [class.bg-green-500]="isCameraOn"
+               [class.animate-pulse]="isCameraOn"></div>
+          <span class="text-white text-sm font-medium">
+            {{ isCameraOn ? 'الكاميرا تعمل' : 'الكاميرا مغلقة' }}
+          </span>
+        </div>
+
+        <!-- الفيديو -->
+        <video 
+          #videoElement
+          autoplay 
+          playsinline 
+          muted
+          class="w-full h-full object-cover"
+          [class.hidden]="!isCameraOn">
+        </video>
+
+        <!-- كانفاس للتعرف -->
+        <canvas #canvasElement class="hidden"></canvas>
+
+        <!-- رسالة عندما تكون الكاميرا مغلقة -->
+        <div *ngIf="!isCameraOn" class="text-white text-center p-4">
+          <div class="text-6xl mb-4">📷</div>
+          <p class="text-xl mb-2">الكاميرا مغلقة</p>
+          <p class="text-gray-300">اضغط على زر التشغيل لبدء التعرف على الأشياء</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- آخر كائن تم التعرف عليه -->
+    <div *ngIf="lastDetectedObject && isCameraOn" 
+         class="bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg p-4 mb-6 animate-fade-in">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-lg font-semibold text-blue-800 dark:text-blue-200">تم التعرف على:</h3>
+          <p class="text-2xl font-bold text-blue-900 dark:text-blue-100 mt-1">
+            {{ lastDetectedObject }}
+          </p>
+        </div>
+        <div class="text-3xl">🎯</div>
+      </div>
+    </div>
+
+    <!-- لوحة التحكم -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <!-- زر تشغيل/إيقاف الكاميرا -->
+        <button 
+          (click)="toggleCamera()"
+          [disabled]="!isModelLoaded || isLoading"
+          class="flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-lg text-white transition-colors"
+          [class.bg-green-600]="!isCameraOn"
+          [class.bg-red-600]="isCameraOn"
+          [class.hover-bg-green-700]="!isCameraOn"
+          [class.hover-bg-red-700]="isCameraOn"
+          [class.opacity-50]="!isModelLoaded || isLoading"
+        >
+          <span class="ml-2">{{ isCameraOn ? 'إيقاف الكاميرا' : 'تشغيل الكاميرا' }}</span>
+          {{ isCameraOn ? '⏹️' : '▶️' }}
+        </button>
+
+        <!-- زر تبديل الكاميرا -->
+        <button 
+          (click)="switchCamera()"
+          [disabled]="!isModelLoaded || isLoading"
+          class="flex items-center justify-center px-6 py-3 bg-blue-600 hover:bg-blue-700 border border-transparent text-base font-medium rounded-lg text-white transition-colors disabled:opacity-50"
+        >
+          <span class="ml-2">تبديل الكاميرا</span>
+          🔄
+        </button>
+
+        <!-- زر إعادة تحميل النموذج -->
+        <button 
+          (click)="reloadModel()"
+          [disabled]="isLoading"
+          class="flex items-center justify-center px-6 py-3 bg-purple-600 hover:bg-purple-700 border border-transparent text-base font-medium rounded-lg text-white transition-colors disabled:opacity-50"
+        >
+          <span class="ml-2">إعادة تحميل النموذج</span>
+          🔄
+        </button>
+      </div>
+
+      <!-- حالة النموذج -->
+      <div class="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div class="flex items-center justify-between">
+          <span class="text-gray-700 dark:text-gray-300">حالة النموذج:</span>
+          <span class="flex items-center" [class.text-green-600]="isModelLoaded" [class.text-red-600]="!isModelLoaded">
+            {{ isModelLoaded ? '🟢 جاهز' : '🔴 غير محمل' }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- معلومات التطبيق -->
+    <div class="mt-8 bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded-lg p-6">
+      <h3 class="text-lg font-semibold text-yellow-800 dark:text-yellow-200 mb-2">معلومات مهمة:</h3>
+      <ul class="list-disc list-inside space-y-2 text-yellow-700 dark:text-yellow-300">
+        <li>التطبيق يتعرف على الأشياء أمام الكاميرا وينطقها باللغة العربية</li>
+        <li>لأفضل أداء، تأكد من إعطاء الإذن لاستخدام الكاميرا</li>
+        <li>التعرف على الأشياء يعمل كل ثانيتين لتقليل استهلاك الطاقة</li>
+        <li>الصوت لا يتكرر لنفس الكائن في فترة أقل من 3 ثوانٍ</li>
+      </ul>
+    </div>
+  </main>
+</div>
