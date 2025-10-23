@@ -8,6 +8,7 @@ import {
   ElementRef,
 } from '@angular/core';
 import { InferenceSession, Tensor, env } from 'onnxruntime-web';
+import * as ort from 'onnxruntime-web';
 
 interface Detection {
   class: string;
@@ -275,64 +276,59 @@ export class CameraDetectionComponent implements OnInit, OnDestroy {
   }
 
   // التعرف على الأشياء
-  private async detectObjects() {
-    console.log('بدء التعرف على الأشياء...');
-    if (!this.session) {
-      console.error('النموذج غير محمل');
+private async detectObjects() {
+  console.log('بدء التعرف على الأشياء...');
+  if (!this.session) {
+    console.error('النموذج غير محمل');
+    return;
+  }
+
+  try {
+    const canvas = this.canvasElement.nativeElement;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      console.error('تعذر الحصول على context للكانفاس');
       return;
     }
 
-    try {
-      const canvas = this.canvasElement.nativeElement;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        console.error('تعذر الحصول على context للكانفاس');
-        return;
-      }
+    // تعيين أبعاد الكانفاس
+    const video = this.videoElement.nativeElement;
+    canvas.width = 320;
+    canvas.height = 320;
 
-      // تعيين أبعاد الكانفاس
-      const video = this.videoElement.nativeElement;
-      canvas.width = 320;
-      canvas.height = 320;
+    // رسم الفيديو على الكانفاس
+    ctx.drawImage(video, 0, 0, 320, 320);
 
-      // رسم الفيديو على الكانفاس مع الحفاظ على التناسب
-      ctx.drawImage(video, 0, 0, 320, 320);
+    // تحويل الصورة لتنسيق مناسب للنموذج
+    const imageData = ctx.getImageData(0, 0, 320, 320);
+    const inputTensor = this.preprocessImage(imageData);
 
-      // تحويل الصورة إلى تنسيق مناسب للنموذج
-      const imageData = ctx.getImageData(0, 0, 320, 320);
-      const input = this.preprocessImage(imageData);
+    console.log('📥 اسم الإدخال المستخدم:', this.session.inputNames[0]);
+    console.log('📤 اسم الإخراج المتوقع:', this.session.outputNames[0]);
+    console.log('جاري تشغيل النموذج...');
 
-      console.log('جاري تشغيل النموذج...');
+    // ✅ تمرير الإدخال بالاسم الصحيح فعليًا
+    const feeds: Record<string, ort.Tensor> = {};
+    feeds[this.session.inputNames[0]] = inputTensor;
 
-      // تشغيل النموذج - قد يكون اسم الإدخال مختلفاً
-      const feeds: any = {};
+    // تشغيل النموذج
+    const results = await this.session.run(feeds);
 
-      // تجربة أسماء إدخال مختلفة شائعة في YOLOv8
-      const possibleInputNames = ['images', 'input', 'data', 'x'];
-      let inputName = 'images';
+    console.log('✅ تم تشغيل النموذج بنجاح');
+    console.log('نتائج النموذج:', results);
 
-      // البحث عن اسم الإدخال الصحيح
-      for (const name of possibleInputNames) {
-        try {
-        const results = await this.session.run({ [this.session.inputNames[0]]: input });
-          console.log('✅ تم تشغيل النموذج بنجاح باسم الإدخال:', name);
-          console.log('نتائج النموذج:', results);
+    // استخراج النتائج ومعالجتها
+    const detections = this.postprocessResults(results);
+    console.log('الكائنات المكتشفة:', detections);
 
-          const detections = this.postprocessResults(results);
-          console.log('الكائنات المكتشفة:', detections);
+    // عرض النتائج على الشاشة
+    this.processDetections(detections);
 
-          this.processDetections(detections);
-          return;
-        } catch (e) {
-          console.log(`❌ اسم الإدخال ${name} غير صحيح`);
-        }
-      }
-
-      console.error('❌ لم يتم العثور على اسم الإدخال الصحيح');
-    } catch (error) {
-      console.error('خطأ في التعرف على الأشياء:', error);
-    }
+  } catch (error) {
+    console.error('خطأ في التعرف على الأشياء:', error);
   }
+}
+
 
   // معالجة الصورة قبل إدخالها للنموذج (مصححة)
   private preprocessImage(imageData: ImageData): Tensor {
