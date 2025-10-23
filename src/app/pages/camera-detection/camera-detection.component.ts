@@ -110,7 +110,8 @@ export class CameraDetectionComponent implements OnInit, OnDestroy {
   private async configureONNXRuntime() {
   env.wasm.wasmPaths = '/assets/wasm/';
   env.wasm.numThreads = 1;
-  env.wasm.simd = false;
+  env.wasm.simd = true;
+  
 }
 
 private showModelError() {
