@@ -329,117 +329,120 @@ export class CameraDetectionComponent implements OnInit, OnDestroy {
   }
 
   // معالجة الصورة قبل إدخالها للنموذج (مصححة)
-private preprocessImage(imageData: ImageData): Tensor {
-  const { data, width, height } = imageData;
-  const input = new Float32Array(3 * 640 * 640);
+  private preprocessImage(imageData: ImageData): Tensor {
+    const { data, width, height } = imageData;
+    const input = new Float32Array(3 * 640 * 640);
 
-  for (let i = 0; i < data.length; i += 4) {
-    const pixelIndex = i / 4;
-    const y = Math.floor(pixelIndex / width);
-    const x = pixelIndex % width;
+    for (let i = 0; i < data.length; i += 4) {
+      const pixelIndex = i / 4;
+      const y = Math.floor(pixelIndex / width);
+      const x = pixelIndex % width;
 
-    if (x < 640 && y < 640) {
-      const targetIndex = y * 640 + x;
+      if (x < 640 && y < 640) {
+        const targetIndex = y * 640 + x;
 
-      // ترتيب القنوات RGB + تطبيع
-      input[targetIndex] = data[i] / 255.0; // R
-      input[640 * 640 + targetIndex] = data[i + 1] / 255.0; // G
-      input[2 * 640 * 640 + targetIndex] = data[i + 2] / 255.0; // B
+        // ترتيب القنوات RGB + تطبيع
+        input[targetIndex] = data[i] / 255.0; // R
+        input[640 * 640 + targetIndex] = data[i + 1] / 255.0; // G
+        input[2 * 640 * 640 + targetIndex] = data[i + 2] / 255.0; // B
+      }
     }
+
+    console.log('✅ تمت معالجة الصورة، الأبعاد:', [1, 3, 640, 640]);
+    return new Tensor('float32', input, [1, 3, 640, 640]);
   }
-
-  console.log('✅ تمت معالجة الصورة، الأبعاد:', [1, 3, 640, 640]);
-  return new Tensor('float32', input, [1, 3, 640, 640]);
-}
-
-
 
   // معالجة نتائج النموذج (مصححة)
-private postprocessResults(results: any): Detection[] {
-  const detections: Detection[] = [];
-  const outputTensor = results[this.session!.outputNames[0]];
-  const [batch, numBoxes, numAttrs] = outputTensor.dims; // عادة [1, 25200, 85]
-  const data = outputTensor.data as Float32Array;
+  private postprocessResults(results: any): Detection[] {
+    const detections: Detection[] = [];
+    const outputTensor = results[this.session!.outputNames[0]];
+    const [batch, numBoxes, numAttrs] = outputTensor.dims; // عادة [1, 25200, 85]
+    const data = outputTensor.data as Float32Array;
 
-  for (let i = 0; i < numBoxes; i++) {
-    const offset = i * numAttrs;
+    for (let i = 0; i < numBoxes; i++) {
+      const offset = i * numAttrs;
 
-    // ✅ التعديل هنا:
-    const objectness = data[offset + 4]; // احتمال وجود كائن
-    const classScores = data.slice(offset + 5, offset + numAttrs); // قنوات الأصناف فقط
-    const maxClassId = classScores.indexOf(Math.max(...classScores));
-    const maxClassConf = classScores[maxClassId];
-    const finalConf = objectness * maxClassConf;
-
-    if (finalConf > 0.3) { // threshold
-      detections.push({
-        class: this.classNames[maxClassId] || `كائن ${maxClassId}`,
-        confidence: finalConf,
-        bbox: [
-          data[offset],     // x
-          data[offset + 1], // y
-          data[offset + 2], // w
-          data[offset + 3], // h
-        ],
-      });
+      // ✅ التعديل هنا:
+      const objectness = data[offset + 4]; // الاحتمال الصحيح لوجود الكائن
+      const classScores = data.slice(offset + 5, offset + numAttrs); // class scores تبدأ من offset + 5
+      const maxClassId = classScores.indexOf(Math.max(...classScores));
+      const maxClassConf = classScores[maxClassId];
+      const finalConf = objectness * maxClassConf;
+      if (maxClassId >= this.classNames.length) {
+        console.warn('تم اكتشاف classId خارج نطاق classNames:', maxClassId);
+      }
+      if (finalConf > 0.3) {
+        // threshold
+        detections.push({
+          class: this.classNames[maxClassId] || `كائن ${maxClassId}`,
+          confidence: finalConf,
+          bbox: [
+            data[offset], // x
+            data[offset + 1], // y
+            data[offset + 2], // w
+            data[offset + 3], // h
+          ],
+        });
+      }
     }
+
+    // ⚡ يفضل إضافة NMS لتقليل التكرار:
+    // return this.applyNMS(detections, 0.5);
+
+    return detections;
   }
 
-  // ⚡ يفضل إضافة NMS لتقليل التكرار:
-  // return this.applyNMS(detections, 0.5);
+// معالجة الاكتشافات
+private processDetections(detections: Detection[]) {
+  if (detections.length === 0) {
+    this.lastDetectedObject = '';
+    return;
+  }
 
-  return detections;
+  // الحصول على أكثر كائن ثقة
+  const bestDetection = detections.reduce((prev, current) =>
+    prev.confidence > current.confidence ? prev : current
+  );
+
+  // عرض الاسم بالإنجليزي
+  this.lastDetectedObject = `${bestDetection.class} (${Math.round(
+    bestDetection.confidence * 100
+  )}%)`;
+
+  // نطق الكائن المكتشف بالإنجليزي
+  this.speakObject(bestDetection.class);
+
+  // اهتزاز الجهاز
+  if (navigator.vibrate) {
+    navigator.vibrate(200);
+  }
 }
 
-  // معالجة الاكتشافات
-  private processDetections(detections: Detection[]) {
-    if (detections.length === 0) {
-      this.lastDetectedObject = '';
-      return;
-    }
+// نطق الكائن المكتشف بالإنجليزي
+private speakObject(objectName: string) {
+  const now = Date.now();
 
-    // الحصول على أكثر كائن ثقة
-    const bestDetection = detections.reduce((prev, current) =>
-      prev.confidence > current.confidence ? prev : current
-    );
-
-    this.lastDetectedObject = `${bestDetection.class} (${Math.round(
-      bestDetection.confidence * 100
-    )}%)`;
-
-    // نطق الكائن المكتشف
-    this.speakObject(bestDetection.class);
-
-    // اهتزاز الجهاز
-    if (navigator.vibrate) {
-      navigator.vibrate(200);
-    }
+  // التحقق من عدم تكرار النطق لنفس الكائن في فترة قصيرة
+  if (
+    objectName === this.lastSpokenObject &&
+    now - this.lastSpokenTime < this.SPEECH_COOLDOWN
+  ) {
+    return;
   }
 
-  // نطق الكائن المكتشف
-  private speakObject(objectName: string) {
-    const now = Date.now();
+  if ('speechSynthesis' in window) {
+    const msg = new SpeechSynthesisUtterance(`Detected ${objectName}`);
+    msg.lang = 'en-US'; // تغيير اللغة للإنجليزي
+    msg.rate = 1;
+    msg.pitch = 1;
 
-    // التحقق من عدم تكرار النطق لنفس الكائن في فترة قصيرة
-    if (
-      objectName === this.lastSpokenObject &&
-      now - this.lastSpokenTime < this.SPEECH_COOLDOWN
-    ) {
-      return;
-    }
+    window.speechSynthesis.speak(msg);
 
-    if ('speechSynthesis' in window) {
-      const msg = new SpeechSynthesisUtterance(`${objectName} أمامك`);
-      msg.lang = 'ar-SA';
-      msg.rate = 1;
-      msg.pitch = 1;
-
-      window.speechSynthesis.speak(msg);
-
-      this.lastSpokenObject = objectName;
-      this.lastSpokenTime = now;
-    }
+    this.lastSpokenObject = objectName;
+    this.lastSpokenTime = now;
   }
+}
+
 
   // إعادة تحميل النموذج
   async reloadModel() {
@@ -461,87 +464,4 @@ private postprocessResults(results: any): Detection[] {
     document.documentElement.classList.toggle('dark', this.isDarkMode);
   }
 
-  // اختبار النموذج بصورة ثابتة
-  async testModelWithStaticImage() {
-    if (!this.session) {
-      console.error('النموذج غير محمل');
-      return;
-    }
-
-    try {
-      console.log('🔍 اختبار النموذج بصورة ثابتة...');
-
-      const canvas = this.canvasElement.nativeElement;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // إنشاء صورة اختبارية (مربع أحمر)
-      canvas.width = 640;
-      canvas.height = 640;
-
-      ctx.fillStyle = 'red';
-      ctx.fillRect(100, 100, 50, 50);
-
-      const imageData = ctx.getImageData(0, 0, 640, 640);
-
-      const input = this.preprocessImage(imageData);
-
-      // تشغيل النموذج
-      const results = await this.session.run({
-        [this.session.inputNames[0]]: input,
-      });
-      console.log('نتائج اختبار الصورة الثابتة:', results);
-
-      const detections = this.postprocessResults(results);
-      console.log('الاكتشافات من الصورة الثابتة:', detections);
-
-      if (detections.length > 0) {
-        this.processDetections(detections);
-      } else {
-        console.log('❌ لم يتم اكتشاف أي كائن في الصورة الاختبارية');
-      }
-    } catch (error) {
-      console.error('خطأ في اختبار النموذج:', error);
-    }
-  }
-
-  // تحميل صورة خارجية للاختبار
-  async testModelWithExternalImage(imageUrl: string) {
-    if (!this.session) {
-      console.error('النموذج غير محمل');
-      return;
-    }
-
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = async () => {
-        try {
-          const canvas = this.canvasElement.nativeElement;
-          const ctx = canvas.getContext('2d');
-          if (!ctx) return;
-
-          canvas.width = 640;
-          canvas.height = 640;
-          ctx.drawImage(img, 0, 0, 640, 640);
-          const imageData = ctx.getImageData(0, 0, 640, 640);
-
-          const input = this.preprocessImage(imageData);
-
-          const results = await this.session!.run({ images: input });
-          console.log('نتائج اختبار الصورة الخارجية:', results);
-
-          const detections = this.postprocessResults(results);
-          console.log('الاكتشافات من الصورة الخارجية:', detections);
-
-          this.processDetections(detections);
-          resolve(detections);
-        } catch (error) {
-          console.error('خطأ في اختبار الصورة الخارجية:', error);
-          resolve([]);
-        }
-      };
-      img.src = imageUrl;
-    });
-  }
 }

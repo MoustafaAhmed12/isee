@@ -129,35 +129,7 @@
       </div>
     </div>
 
-    <!-- قسم التصحيح (يمكن إزالته لاحقاً) -->
-<div class="mt-6 bg-gray-100 dark:bg-gray-700 rounded-lg p-4">
-  <h3 class="text-lg font-semibold text-gray-800 dark:text-gray-200 mb-3">أدوات التصحيح</h3>
-  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-    <button 
-      (click)="testModelWithStaticImage()"
-      class="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg transition-colors"
-    >
-      اختبار بصورة ثابتة
-    </button>
-    <button 
-      (click)="testModelWithExternalImage('https://via.placeholder.com/320x320/FF0000/FFFFFF?text=Red+Square')"
-      class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
-    >
-      اختبار بصورة خارجية
-    </button>
-  </div>
-</div>
-
-<!-- معلومات التصحيح -->
-<div class="mt-4 bg-green-50 dark:bg-green-900 border border-green-200 dark:border-green-700 rounded-lg p-4">
-  <h4 class="font-semibold text-green-800 dark:text-green-200 mb-2">معلومات التصحيح:</h4>
-  <div class="text-sm text-green-700 dark:text-green-300 space-y-1">
-    <p>حالة النموذج: {{ isModelLoaded ? '🟢 محمل' : '🔴 غير محمل' }}</p>
-    <p>حالة الكاميرا: {{ isCameraOn ? '🟢 تعمل' : '🔴 متوقفة' }}</p>
-    <p>آخر كائن: {{ lastDetectedObject || 'لم يتم اكتشاف أي شيء' }}</p>
-    <p>تحقق من console للمزيد من المعلومات</p>
-  </div>
-</div>
+    
 
     <!-- معلومات التطبيق -->
     <div class="mt-8 bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded-lg p-6">
