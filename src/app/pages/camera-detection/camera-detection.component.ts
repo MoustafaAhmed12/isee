@@ -276,59 +276,54 @@ export class CameraDetectionComponent implements OnInit, OnDestroy {
   }
 
   // التعرف على الأشياء
-private async detectObjects() {
-  console.log('بدء التعرف على الأشياء...');
-  if (!this.session) {
-    console.error('النموذج غير محمل');
-    return;
-  }
-
-  try {
-    const canvas = this.canvasElement.nativeElement;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      console.error('تعذر الحصول على context للكانفاس');
+  private async detectObjects() {
+    console.log('بدء التعرف على الأشياء...');
+    if (!this.session) {
+      console.error('النموذج غير محمل');
       return;
     }
 
-    // تعيين أبعاد الكانفاس
-    const video = this.videoElement.nativeElement;
-    canvas.width = 320;
-    canvas.height = 320;
+    try {
+      const canvas = this.canvasElement.nativeElement;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        console.error('تعذر الحصول على context للكانفاس');
+        return;
+      }
 
-    // رسم الفيديو على الكانفاس
-    ctx.drawImage(video, 0, 0, 320, 320);
+      // تعيين أبعاد الكانفاس
+      const video = this.videoElement.nativeElement;
+      canvas.width = 640;
+      canvas.height = 640;
+      ctx.drawImage(video, 0, 0, 640, 640);
+      const imageData = ctx.getImageData(0, 0, 640, 640);
 
-    // تحويل الصورة لتنسيق مناسب للنموذج
-    const imageData = ctx.getImageData(0, 0, 320, 320);
-    const inputTensor = this.preprocessImage(imageData);
+      const inputTensor = this.preprocessImage(imageData);
 
-    console.log('📥 اسم الإدخال المستخدم:', this.session.inputNames[0]);
-    console.log('📤 اسم الإخراج المتوقع:', this.session.outputNames[0]);
-    console.log('جاري تشغيل النموذج...');
+      console.log('📥 اسم الإدخال المستخدم:', this.session.inputNames[0]);
+      console.log('📤 اسم الإخراج المتوقع:', this.session.outputNames[0]);
+      console.log('جاري تشغيل النموذج...');
 
-    // ✅ تمرير الإدخال بالاسم الصحيح فعليًا
-    const feeds: Record<string, ort.Tensor> = {};
-    feeds[this.session.inputNames[0]] = inputTensor;
+      // ✅ تمرير الإدخال بالاسم الصحيح فعليًا
+      const feeds: Record<string, ort.Tensor> = {};
+      feeds[this.session.inputNames[0]] = inputTensor;
 
-    // تشغيل النموذج
-    const results = await this.session.run(feeds);
+      // تشغيل النموذج
+      const results = await this.session.run(feeds);
 
-    console.log('✅ تم تشغيل النموذج بنجاح');
-    console.log('نتائج النموذج:', results);
+      console.log('✅ تم تشغيل النموذج بنجاح');
+      console.log('نتائج النموذج:', results);
 
-    // استخراج النتائج ومعالجتها
-    const detections = this.postprocessResults(results);
-    console.log('الكائنات المكتشفة:', detections);
+      // استخراج النتائج ومعالجتها
+      const detections = this.postprocessResults(results);
+      console.log('الكائنات المكتشفة:', detections);
 
-    // عرض النتائج على الشاشة
-    this.processDetections(detections);
-
-  } catch (error) {
-    console.error('خطأ في التعرف على الأشياء:', error);
+      // عرض النتائج على الشاشة
+      this.processDetections(detections);
+    } catch (error) {
+      console.error('خطأ في التعرف على الأشياء:', error);
+    }
   }
-}
-
 
   // معالجة الصورة قبل إدخالها للنموذج (مصححة)
   private preprocessImage(imageData: ImageData): Tensor {
