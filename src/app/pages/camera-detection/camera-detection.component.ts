@@ -83,6 +83,7 @@ export class CameraDetectionComponent implements OnInit, OnDestroy {
         }
       );
       this.isModelLoaded = true;
+      console.log('📥 أسماء الإدخالات:', this.session.inputNames);
       console.log('تم تحميل النموذج بنجاح باستخدام WebGL');
     } catch (webglError) {
       console.warn('WebGL غير متاح، جاري استخدام WASM:', webglError);
@@ -444,7 +445,7 @@ async testModelWithStaticImage() {
     const input = this.preprocessImage(imageData);
     
     // تشغيل النموذج
-    const results = await this.session.run({ images: input });
+   const results = await this.session.run({ [this.session.inputNames[0]]: input });
     console.log('نتائج اختبار الصورة الثابتة:', results);
     
     const detections = this.postprocessResults(results);
