@@ -355,83 +355,41 @@ private preprocessImage(imageData: ImageData): Tensor {
 
 
   // معالجة نتائج النموذج (مصححة)
-  private postprocessResults(results: any): Detection[] {
-    const detections: Detection[] = [];
+private postprocessResults(results: any): Detection[] {
+  const detections: Detection[] = [];
+  const outputTensor = results[this.session!.outputNames[0]];
+  const [batch, numBoxes, numAttrs] = outputTensor.dims; // عادة [1, 25200, 85]
+  const data = outputTensor.data as Float32Array;
 
-    console.log('هيكل النتائج:', Object.keys(results));
+  for (let i = 0; i < numBoxes; i++) {
+    const offset = i * numAttrs;
 
-    // البحث عن المخرج الصحيح - YOLOv8 له أسماء مخرجات مختلفة
-    let outputTensor;
-    const possibleOutputNames = ['output0', 'output', 'detections', 'boxes'];
+    // ✅ التعديل هنا:
+    const objectness = data[offset + 4]; // احتمال وجود كائن
+    const classScores = data.slice(offset + 5, offset + numAttrs); // قنوات الأصناف فقط
+    const maxClassId = classScores.indexOf(Math.max(...classScores));
+    const maxClassConf = classScores[maxClassId];
+    const finalConf = objectness * maxClassConf;
 
-    for (const name of possibleOutputNames) {
-      if (results[name]) {
-        outputTensor = results[name];
-        console.log(`✅ تم العثور على المخرج باسم: ${name}`);
-        break;
-      }
+    if (finalConf > 0.3) { // threshold
+      detections.push({
+        class: this.classNames[maxClassId] || `كائن ${maxClassId}`,
+        confidence: finalConf,
+        bbox: [
+          data[offset],     // x
+          data[offset + 1], // y
+          data[offset + 2], // w
+          data[offset + 3], // h
+        ],
+      });
     }
-
-    if (!outputTensor) {
-      // إذا لم نجد باسم معروف، نأخذ أول مخرج
-      const firstKey = Object.keys(results)[0];
-      outputTensor = results[firstKey];
-      console.log(`🔶 استخدام المخرج الأول: ${firstKey}`);
-    }
-
-    const output = outputTensor.data;
-    const outputDims = outputTensor.dims;
-
-    console.log('أبعاد المخرج:', outputDims);
-    console.log('بيانات المخرج:', output);
-
-    // YOLOv8 عادة يعطي شكل [1, 84, 8400] أو [1, 5, 8400]
-    // حيث 84 = 4 (bbox) + 80 (classes) أو 5 = 4 (bbox) + 1 (confidence)
-
-    if (outputDims.length === 3 && outputDims[0] === 1) {
-      const numClasses = outputDims[1] - 4; // نطرح 4 لإحداثيات bbox
-      const numBoxes = outputDims[2];
-
-      console.log(`عدد الصنوف: ${numClasses}, عدد المربعات: ${numBoxes}`);
-
-      for (let i = 0; i < numBoxes; i++) {
-        const startIdx = i * outputDims[1];
-        const confidence = output[startIdx + 4];
-
-        if (confidence > 0.5) {
-          // العثور على الصنف ذو الثقة الأعلى
-          let maxClassConfidence = 0;
-          let maxClassId = 0;
-
-          for (let j = 0; j < numClasses; j++) {
-            const classConfidence = output[startIdx + 4 + j];
-            if (classConfidence > maxClassConfidence) {
-              maxClassConfidence = classConfidence;
-              maxClassId = j;
-            }
-          }
-
-          const finalConfidence = confidence * maxClassConfidence;
-
-          if (finalConfidence > 0.5) {
-            detections.push({
-              class: this.classNames[maxClassId] || `كائن ${maxClassId}`,
-              confidence: finalConfidence,
-              bbox: [
-                output[startIdx], // x
-                output[startIdx + 1], // y
-                output[startIdx + 2], // width
-                output[startIdx + 3], // height
-              ],
-            });
-          }
-        }
-      }
-    }
-
-    console.log(`تم اكتشاف ${detections.length} كائن`);
-    return detections;
   }
+
+  // ⚡ يفضل إضافة NMS لتقليل التكرار:
+  // return this.applyNMS(detections, 0.5);
+
+  return detections;
+}
 
   // معالجة الاكتشافات
   private processDetections(detections: Detection[]) {
